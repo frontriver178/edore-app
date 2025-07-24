@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/edore-app/static/css/main.f282dc8d.css",
+    "main.js": "/edore-app/static/js/main.37c53fa9.js",
+    "static/js/453.c9a0089f.chunk.js": "/edore-app/static/js/453.c9a0089f.chunk.js",
+    "index.html": "/edore-app/index.html",
+    "main.f282dc8d.css.map": "/edore-app/static/css/main.f282dc8d.css.map",
+    "main.37c53fa9.js.map": "/edore-app/static/js/main.37c53fa9.js.map",
+    "453.c9a0089f.chunk.js.map": "/edore-app/static/js/453.c9a0089f.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.f282dc8d.css",
+    "static/js/main.37c53fa9.js"
+  ]
+}
