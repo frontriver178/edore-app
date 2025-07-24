@@ -3,7 +3,6 @@ import { scheduleService } from '../services/scheduleService';
 import { teachingScheduleService } from '../services/teachingScheduleService';
 import { taskService } from '../services/taskService';
 import { supabase } from '../supabaseClient';
-import ScheduleCard from './ScheduleCard';
 
 const DateScheduleModal = ({ 
   isOpen, 
@@ -65,7 +64,7 @@ const DateScheduleModal = ({
       fetchTeachers();
       fetchTaskCategories();
     }
-  }, [isOpen, selectedDate]);
+  }, [isOpen, selectedDate, studentId, organizationId]);
 
   useEffect(() => {
     // 日付が変更されたらフォームデータも更新
@@ -173,7 +172,7 @@ const DateScheduleModal = ({
     e.preventDefault();
     
     try {
-      let result;
+      // let result;
       
       if (scheduleType === 'interview') {
         const scheduleData = {
@@ -184,9 +183,9 @@ const DateScheduleModal = ({
         };
 
         if (editingSchedule && editingSchedule.type === 'interview') {
-          result = await scheduleService.updateSchedule(editingSchedule.id, scheduleData);
+          await scheduleService.updateSchedule(editingSchedule.id, scheduleData);
         } else {
-          result = await scheduleService.createSchedule(scheduleData);
+          await scheduleService.createSchedule(scheduleData);
         }
       } else if (scheduleType === 'teaching') {
         const scheduleData = {
@@ -198,9 +197,9 @@ const DateScheduleModal = ({
         };
 
         if (editingSchedule && editingSchedule.type === 'teaching') {
-          result = await teachingScheduleService.updateSchedule(editingSchedule.id, scheduleData);
+          await teachingScheduleService.updateSchedule(editingSchedule.id, scheduleData);
         } else {
-          result = await teachingScheduleService.createSchedule(scheduleData);
+          await teachingScheduleService.createSchedule(scheduleData);
         }
       } else if (scheduleType === 'task') {
         const taskData = {
@@ -212,9 +211,9 @@ const DateScheduleModal = ({
         };
 
         if (editingSchedule && editingSchedule.type === 'task') {
-          result = await taskService.updateTask(editingSchedule.id, taskData);
+          await taskService.updateTask(editingSchedule.id, taskData);
         } else {
-          result = await taskService.createTask(taskData);
+          await taskService.createTask(taskData);
         }
       }
 

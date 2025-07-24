@@ -36,18 +36,39 @@ const RoleBasedAccess = ({ allowedRoles, children, fallback = null }) => {
   }, [user])
 
   if (loading) {
-    return null
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="spinner"></div>
+          <p className="mt-2 text-gray-600">読み込み中...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!user || !userRole) {
-    return fallback
+    return fallback || (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">アクセス権限がありません</h2>
+          <p className="text-gray-600">このページにアクセスする権限がありません。</p>
+        </div>
+      </div>
+    )
   }
 
   if (allowedRoles.includes(userRole)) {
     return children
   }
 
-  return fallback || null
+  return fallback || (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">アクセス権限が不足しています</h2>
+        <p className="text-gray-600">管理者権限が必要です。</p>
+      </div>
+    </div>
+  )
 }
 
 // 管理者のみアクセス可能

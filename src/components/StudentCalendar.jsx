@@ -102,6 +102,7 @@ const StudentCalendar = ({
         });
       }
     });
+
     
     return events;
   };

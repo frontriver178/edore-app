@@ -132,70 +132,92 @@ const OrganizationSetup = () => {
   }
 
   if (checkingUser) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>ユーザー情報を確認中...</div>
+    return (
+      <div className="auth-container">
+        <div className="auth-card center-text">
+          <div className="auth-text">ユーザー情報を確認中...</div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '500px', margin: '0 auto' }}>
-      <h2>管理者セットアップ</h2>
-      <p style={{ color: '#666', marginBottom: '2rem' }}>
-        運営チームから提供された管理者コードを入力してください。
-      </p>
-      
-      <form onSubmit={handleAdminSetup} style={{ background: '#f8f8f8', padding: '1.5rem', borderRadius: '4px' }}>
-        <h3>🔑 管理者として参加</h3>
-        
-        <div style={{ marginBottom: '1rem' }}>
-          <label>管理者コード *</label>
-          <input 
-            type="text"
-            value={setupData.adminCode}
-            onChange={(e) => setSetupData(prev => ({ ...prev, adminCode: e.target.value.toUpperCase() }))}
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem', fontFamily: 'monospace', fontSize: '1rem' }}
-            placeholder="ADMIN-ABC123"
-            required
-          />
-          <small style={{ color: '#666' }}>※運営チームから提供されたコードを入力してください</small>
-        </div>
-
-        <div style={{ marginBottom: '1rem' }}>
-          <label>あなたの名前 *</label>
-          <input 
-            type="text"
-            value={setupData.name}
-            onChange={(e) => setSetupData(prev => ({ ...prev, name: e.target.value }))}
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
-            required
-          />
-        </div>
-
-        <Button 
-          type="submit" 
-          disabled={loading}
-          loading={loading}
-          variant="primary"
-          style={{ width: '100%' }}
-        >
-          管理者として開始
-        </Button>
-      </form>
-
-      <div style={{ marginTop: '2rem', padding: '1rem', background: '#e8f5e8', borderRadius: '4px' }}>
-        <h4>✅ セットアップ後にできること</h4>
-        <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.9rem' }}>
-          <li>講師の追加・管理</li>
-          <li>生徒の追加・管理</li>
-          <li>面談記録の管理</li>
-          <li>成績・教材管理</li>
-        </ul>
-      </div>
-
-      <div style={{ marginTop: '1rem', padding: '1rem', background: '#e3f2fd', borderRadius: '4px' }}>
-        <h4>💡 新しい塾の開設について</h4>
-        <p style={{ margin: 0, fontSize: '0.9rem' }}>
-          新規塾の開設をご希望の場合は、運営チームまでお問い合わせください。<br/>
-          📧 support@edore.example.com
+    <div className="auth-container">
+      <div className="auth-card">
+        <h2 className="auth-header">管理者セットアップ</h2>
+        <p className="auth-footer-text mb-6">
+          運営チームから提供された管理者コードを入力してください。
         </p>
+        
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">🔑 管理者として参加</h3>
+          </div>
+          <div className="card-content">
+            <form onSubmit={handleAdminSetup} className="auth-form">
+              <div className="auth-form-group">
+                <label className="auth-form-label">管理者コード *</label>
+                <input 
+                  type="text"
+                  value={setupData.adminCode}
+                  onChange={(e) => setSetupData(prev => ({ ...prev, adminCode: e.target.value.toUpperCase() }))}
+                  className="auth-form-input"
+                  style={{ fontFamily: 'monospace', fontSize: '1rem' }}
+                  placeholder="ADMIN-ABC123"
+                  required
+                />
+                <small className="text-secondary">※運営チームから提供されたコードを入力してください</small>
+              </div>
+
+              <div className="auth-form-group">
+                <label className="auth-form-label">あなたの名前 *</label>
+                <input 
+                  type="text"
+                  value={setupData.name}
+                  onChange={(e) => setSetupData(prev => ({ ...prev, name: e.target.value }))}
+                  className="auth-form-input"
+                  required
+                />
+              </div>
+
+              <Button 
+                type="submit" 
+                disabled={loading}
+                loading={loading}
+                variant="primary"
+                className="auth-button"
+              >
+                管理者として開始
+              </Button>
+            </form>
+          </div>
+        </div>
+
+        <div className="card info-card mt-6">
+          <div className="card-header">
+            <h4 className="card-title">✅ セットアップ後にできること</h4>
+          </div>
+          <div className="card-content">
+            <ul className="info-list">
+              <li>講師の追加・管理</li>
+              <li>生徒の追加・管理</li>
+              <li>面談記録の管理</li>
+              <li>成績・教材管理</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="card info-card mt-4">
+          <div className="card-header">
+            <h4 className="card-title">💡 新しい塾の開設について</h4>
+          </div>
+          <div className="card-content">
+            <p className="text-secondary">
+              新規塾の開設をご希望の場合は、運営チームまでお問い合わせください。<br/>
+              📧 support@edore.example.com
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

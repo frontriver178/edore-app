@@ -19,7 +19,7 @@ const SupabaseTestConnection = () => {
     setLoading(true);
     try {
       // 1. 基本的な接続テスト
-      const { data, error: connectionError } = await supabase
+      const { error: connectionError } = await supabase
         .from('organizations')
         .select('count')
         .limit(1);

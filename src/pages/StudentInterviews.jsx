@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useSearchParams, Link } from 'react-router-dom';
 import Button from '../components/Button';
+import { useAuth } from '../contexts/AuthContext';
 
 const StudentInterviews = () => {
   const [interviews, setInterviews] = useState([]);
@@ -10,6 +11,7 @@ const StudentInterviews = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingInterview, setEditingInterview] = useState(null);
+  const { organizationId } = useAuth();
   const [searchParams] = useSearchParams();
   const preSelectedStudentId = searchParams.get('student');
   const [formData, setFormData] = useState({
@@ -19,15 +21,18 @@ const StudentInterviews = () => {
     content: ''
   });
 
+
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (organizationId) {
+      fetchData();
+    }
+  }, [organizationId]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // 面談記録を取得
+      // 面談記録を取得（組織で絞り込み）
       let interviewsQuery = supabase
         .from('student_interviews')
         .select(`
@@ -35,6 +40,7 @@ const StudentInterviews = () => {
           students(name, grade),
           users(name)
         `)
+        .eq('organization_id', organizationId)
         .order('interview_date', { ascending: false });
 
       // 特定の生徒が指定されている場合はフィルタリング
@@ -46,20 +52,22 @@ const StudentInterviews = () => {
 
       if (interviewsError) throw interviewsError;
 
-      // 生徒一覧を取得
+      // 生徒一覧を取得（組織で絞り込み）
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select('id, name, grade')
         .eq('status', 'active')
+        .eq('organization_id', organizationId)
         .order('grade', { ascending: true });
 
       if (studentsError) throw studentsError;
 
-      // 講師一覧を取得
+      // 講師一覧を取得（組織で絞り込み）
       const { data: teachersData, error: teachersError } = await supabase
         .from('users')
         .select('id, name')
         .in('role', ['admin', 'teacher'])
+        .eq('organization_id', organizationId)
         .order('name', { ascending: true });
 
       if (teachersError) throw teachersError;
@@ -79,21 +87,8 @@ const StudentInterviews = () => {
     e.preventDefault();
     
     try {
-      // 組織IDを動的に取得（既存の組織から最初の1つを取得）
-      const { data: organizations, error: orgError } = await supabase
-        .from('organizations')
-        .select('id')
-        .limit(1);
-      
-      if (orgError) throw orgError;
-      
-      if (!organizations || organizations.length === 0) {
-        alert('組織情報が見つかりません');
-        return;
-      }
-
       const interviewData = {
-        organization_id: organizations[0].id, // 動的に取得
+        organization_id: organizationId,
         student_id: formData.student_id,
         teacher_id: formData.teacher_id,
         interview_date: formData.interview_date,

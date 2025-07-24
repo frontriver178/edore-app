@@ -2,30 +2,35 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { taskService } from '../services/taskService';
 import { supabase } from '../supabaseClient';
+import TaskFormModal from '../components/TaskFormModal';
+import { useAuth } from '../contexts/AuthContext';
 import '../SpreadsheetStyle.css';
 
 const Tasks = () => {
   const [tasks, setTasks] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [stats, setStats] = useState({});
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const { organizationId } = useAuth();
   const [searchParams] = useSearchParams();
   const preSelectedStudentId = searchParams.get('student');
 
-  // 仮の組織ID（実際はAuthContextから取得）
-  const organizationId = '11111111-1111-1111-1111-111111111111';
+  // モーダル関連のstate
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+
 
   // 選択された生徒の情報を取得
   useEffect(() => {
     const fetchSelectedStudent = async () => {
-      if (preSelectedStudentId) {
+      if (preSelectedStudentId && organizationId) {
         try {
           const { data: studentData, error } = await supabase
             .from('students')
             .select('id, name, grade')
             .eq('id', preSelectedStudentId)
+            .eq('organization_id', organizationId)
             .single();
           
           if (error) throw error;
@@ -39,9 +44,11 @@ const Tasks = () => {
     };
 
     fetchSelectedStudent();
-  }, [preSelectedStudentId]);
+  }, [preSelectedStudentId, organizationId]);
 
   const loadData = useCallback(async () => {
+    if (!organizationId) return;
+    
     try {
       setLoading(true);
       let tasksData;
@@ -54,7 +61,7 @@ const Tasks = () => {
         tasksData = await taskService.getTasksByOrganization(organizationId);
       }
       
-      const [categoriesData, statsData] = await Promise.all([
+      const [, statsData] = await Promise.all([
         taskService.getTaskCategories(organizationId),
         preSelectedStudentId ? 
           taskService.getTaskStatsByStudent(preSelectedStudentId) :
@@ -62,7 +69,6 @@ const Tasks = () => {
       ]);
       
       setTasks(tasksData);
-      setCategories(categoriesData);
       setStats(statsData);
     } catch (error) {
       console.error('データ読み込みエラー:', error);
@@ -97,6 +103,25 @@ const Tasks = () => {
     }
   };
 
+  const handleEditTask = (task) => {
+    setEditingTask(task);
+    setShowTaskModal(true);
+  };
+
+  const handleNewTask = () => {
+    setEditingTask(null);
+    setShowTaskModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowTaskModal(false);
+    setEditingTask(null);
+  };
+
+  const handleTaskSaved = () => {
+    loadData();
+  };
+
   const getFilteredTasks = () => {
     switch (filter) {
       case 'pending':
@@ -115,15 +140,15 @@ const Tasks = () => {
     }
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'pending': return '未着手';
-      case 'in_progress': return '作業中';
-      case 'completed': return '完了';
-      case 'cancelled': return 'キャンセル';
-      default: return status;
-    }
-  };
+  // const getStatusText = (status) => {
+  //   switch (status) {
+  //     case 'pending': return '未着手';
+  //     case 'in_progress': return '作業中';
+  //     case 'completed': return '完了';
+  //     case 'cancelled': return 'キャンセル';
+  //     default: return status;
+  //   }
+  // };
 
   if (loading) {
     return <div className="loading">読み込み中...</div>;
@@ -149,7 +174,12 @@ const Tasks = () => {
             </h1>
           </div>
           <div className="toolbar-actions">
-            <button className="btn btn-primary">新規タスク作成</button>
+            <button 
+              className="btn btn-primary"
+              onClick={handleNewTask}
+            >
+              新規タスク作成
+            </button>
           </div>
         </div>
       </div>
@@ -330,7 +360,7 @@ const Tasks = () => {
                             <div className="flex gap-2">
                               <button 
                                 className="btn-text text-green"
-                                onClick={() => alert('編集機能は実装中です')}
+                                onClick={() => handleEditTask(task)}
                               >
                                 編集
                               </button>
@@ -352,6 +382,15 @@ const Tasks = () => {
           </div>
         </div>
       </div>
+
+      {/* タスクフォームモーダル */}
+      <TaskFormModal
+        isOpen={showTaskModal}
+        onClose={handleCloseModal}
+        task={editingTask}
+        organizationId={organizationId}
+        onTaskSaved={handleTaskSaved}
+      />
     </div>
   );
 };

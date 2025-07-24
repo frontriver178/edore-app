@@ -1,0 +1,107 @@
+/* ==========================================
+   統一UIコンポーネント用スタイルシート
+   Button, Input, Modal, FormGroup等の共通スタイル
+   ========================================== */
+
+/* モーダルのサイズバリエーション */
+.modal-small {
+  max-width: 400px;
+  width: 90vw;
+}
+
+.modal-medium {
+  max-width: 600px;
+  width: 90vw;
+}
+
+.modal-large {
+  max-width: 800px;
+  width: 90vw;
+  max-height: 90vh;
+}
+
+/* フォームグループのエラー状態 */
+.form-group.has-error .form-input,
+.form-group.has-error .form-textarea,
+.form-group.has-error .form-select {
+  border-color: var(--text-error);
+  box-shadow: 0 0 0 1px var(--text-error);
+}
+
+.form-group.has-error .form-label {
+  color: var(--text-error);
+}
+
+/* 入力フィールドのフォーカス状態改善 */
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+  outline: 2px solid var(--primary-green);
+  outline-offset: 1px;
+}
+
+/* ボタンのフォーカス状態改善 */
+.btn:focus {
+  outline: 2px solid var(--primary-green);
+  outline-offset: 1px;
+}
+
+/* モーダルのz-index調整 */
+.modal-overlay {
+  z-index: 1000;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .modal-small,
+  .modal-medium,
+  .modal-large {
+    width: 95vw;
+    max-width: none;
+    margin: 2.5vh auto;
+  }
+  
+  .modal-large {
+    max-height: 95vh;
+  }
+}
+
+/* ダークモード対応（将来的な拡張） */
+@media (prefers-color-scheme: dark) {
+  /* ダークモードのスタイルをここに追加 */
+}
+
+/* 高コントラストモード対応 */
+@media (prefers-contrast: high) {
+  .form-input,
+  .form-textarea,
+  .form-select {
+    border-width: 2px;
+  }
+  
+  .btn {
+    border-width: 2px;
+  }
+}
+
+/* 動きを減らすモード対応 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 印刷用スタイル */
+@media print {
+  .modal-overlay {
+    display: none;
+  }
+  
+  .btn {
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+  }
+}

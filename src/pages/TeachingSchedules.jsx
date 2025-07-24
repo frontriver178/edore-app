@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { teachingScheduleService } from '../services/teachingScheduleService';
 import { supabase } from '../supabaseClient';
 import Button from '../components/Button';
+import FullPageLoader from '../components/FullPageLoader';
 import BulkScheduleModal from '../components/BulkScheduleModal';
+import { useAuth } from '../contexts/AuthContext';
 import '../SpreadsheetStyle.css';
 
 const TeachingSchedules = () => {
@@ -17,9 +19,7 @@ const TeachingSchedules = () => {
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [completingSchedule, setCompletingSchedule] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
-
-  // 仮の組織ID（実際はAuthContextから取得）
-  const organizationId = '11111111-1111-1111-1111-111111111111';
+  const { organizationId } = useAuth();
 
   const [formData, setFormData] = useState({
     student_id: '',
@@ -44,9 +44,18 @@ const TeachingSchedules = () => {
     '日本史', '世界史', '地理', '現代社会', '政治経済', '倫理', '小論文'
   ];
 
+
   const loadData = useCallback(async () => {
+    if (!organizationId) {
+      console.log('⏳ TeachingSchedules: organizationId待機中');
+      return;
+    }
+    
     try {
+      console.log('🚀 TeachingSchedules: データ読み込み開始', organizationId);
+      const fetchStart = performance.now();
       setLoading(true);
+      
       const [schedulesData, studentsData, teachersData, statsData] = await Promise.all([
         teachingScheduleService.getSchedulesByOrganization(organizationId),
         getStudents(),
@@ -58,14 +67,23 @@ const TeachingSchedules = () => {
       setStudents(studentsData);
       setTeachers(teachersData);
       setStats(statsData);
+      
+      const fetchEnd = performance.now();
+      console.log(`✅ TeachingSchedules: データ取得完了 ${(fetchEnd - fetchStart).toFixed(2)}ms`, {
+        schedules: schedulesData?.length || 0,
+        students: studentsData?.length || 0,
+        teachers: teachersData?.length || 0
+      });
     } catch (error) {
-      console.error('データ読み込みエラー:', error);
+      console.error('❌ TeachingSchedules: データ読み込みエラー:', error);
     } finally {
       setLoading(false);
     }
   }, [organizationId]);
 
   const getStudents = async () => {
+    if (!organizationId) return [];
+    
     const { data, error } = await supabase
       .from('students')
       .select('id, name, grade')
@@ -78,6 +96,8 @@ const TeachingSchedules = () => {
   };
 
   const getTeachers = async () => {
+    if (!organizationId) return [];
+    
     const { data, error } = await supabase
       .from('users')
       .select('id, name')
@@ -111,8 +131,22 @@ const TeachingSchedules = () => {
       };
 
       if (editingSchedule) {
-        await teachingScheduleService.updateSchedule(editingSchedule.id, scheduleData);
-        alert('指導スケジュールを更新しました');
+        if (formData.student_id === 'bulk' && editingSchedule.bulkEdit) {
+          // 一括編集の場合
+          const groupSchedules = editingSchedule.groupSchedules;
+          for (const schedule of groupSchedules) {
+            const updateData = {
+              ...scheduleData,
+              student_id: schedule.student_id // 各生徒のIDを保持
+            };
+            await teachingScheduleService.updateSchedule(schedule.id, updateData);
+          }
+          alert(`${groupSchedules.length}件の指導スケジュールを一括更新しました`);
+        } else {
+          // 個別編集の場合
+          await teachingScheduleService.updateSchedule(editingSchedule.id, scheduleData);
+          alert('指導スケジュールを更新しました');
+        }
       } else {
         await teachingScheduleService.createSchedule(scheduleData);
         alert('指導スケジュールを作成しました');
@@ -198,6 +232,73 @@ const TeachingSchedules = () => {
     }
   };
 
+  // 一括完了処理
+  const handleBulkComplete = async (group) => {
+    if (!window.confirm(`${group.students.length}件の指導を一括完了しますか？`)) {
+      return;
+    }
+
+    try {
+      for (const schedule of group.allSchedules) {
+        // スケジュールのステータスを完了に更新するだけ
+        const { error: updateError } = await supabase
+          .from('teaching_schedules')
+          .update({ 
+            status: 'completed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', schedule.id);
+
+        if (updateError) throw updateError;
+      }
+
+      alert(`${group.students.length}件の指導を一括完了しました`);
+      loadData();
+    } catch (error) {
+      console.error('一括完了エラー:', error);
+      alert('一括完了処理に失敗しました');
+    }
+  };
+
+  // 一括削除処理
+  const handleBulkDelete = async (group) => {
+    if (!window.confirm(`${group.students.length}件の指導スケジュールを一括削除しますか？`)) {
+      return;
+    }
+
+    try {
+      for (const schedule of group.allSchedules) {
+        await teachingScheduleService.deleteSchedule(schedule.id);
+      }
+      alert(`${group.students.length}件のスケジュールを一括削除しました`);
+      loadData();
+    } catch (error) {
+      console.error('一括削除エラー:', error);
+      alert('一括削除処理に失敗しました');
+    }
+  };
+
+  // 一括編集処理
+  const handleBulkEdit = (group) => {
+    // グループの代表スケジュールをベースにフォームを設定
+    setEditingSchedule({
+      ...group.allSchedules[0],
+      bulkEdit: true,
+      groupSchedules: group.allSchedules
+    });
+    setFormData({
+      student_id: 'bulk', // 一括編集フラグ
+      teacher_id: group.teacher_id,
+      scheduled_date: group.scheduled_date,
+      start_time: group.start_time,
+      end_time: group.end_time,
+      subject: group.subject,
+      topic: group.topic || '',
+      notes: group.notes || ''
+    });
+    setShowForm(true);
+  };
+
   const resetForm = () => {
     setFormData({
       student_id: '',
@@ -232,6 +333,35 @@ const TeachingSchedules = () => {
     }
   };
 
+  // 同じ日時・講師・科目・内容のスケジュールをグループ化
+  const getGroupedSchedules = () => {
+    const filteredSchedules = getFilteredSchedules();
+    const groups = {};
+    
+    filteredSchedules.forEach(schedule => {
+      const groupKey = `${schedule.scheduled_date}_${schedule.start_time}_${schedule.end_time}_${schedule.teacher_id}_${schedule.subject}_${schedule.topic}`;
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          ...schedule,
+          students: [schedule.students],
+          scheduleIds: [schedule.id],
+          allSchedules: [schedule]
+        };
+      } else {
+        groups[groupKey].students.push(schedule.students);
+        groups[groupKey].scheduleIds.push(schedule.id);
+        groups[groupKey].allSchedules.push(schedule);
+      }
+    });
+    
+    return Object.values(groups).sort((a, b) => {
+      const dateA = new Date(`${a.scheduled_date} ${a.start_time}`);
+      const dateB = new Date(`${b.scheduled_date} ${b.start_time}`);
+      return dateA - dateB;
+    });
+  };
+
   const getStatusText = (status) => {
     switch (status) {
       case 'scheduled': return '予定';
@@ -242,7 +372,7 @@ const TeachingSchedules = () => {
   };
 
   if (loading) {
-    return <div className="loading">読み込み中...</div>;
+    return <FullPageLoader message="指導スケジュールを読み込み中..." />
   }
 
   return (
@@ -314,7 +444,7 @@ const TeachingSchedules = () => {
             </h2>
           </div>
           <div className="card-content">
-            {getFilteredSchedules().length === 0 ? (
+            {getGroupedSchedules().length === 0 ? (
               <p className="text-light text-center py-8">
                 指導スケジュールがありません
               </p>
@@ -330,41 +460,52 @@ const TeachingSchedules = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {getFilteredSchedules().map(schedule => {
-                      const isOverdue = schedule.status === 'scheduled' && 
-                        new Date(schedule.scheduled_date) < new Date();
-                      const isToday = schedule.scheduled_date === 
+                    {getGroupedSchedules().map(group => {
+                      const isOverdue = group.status === 'scheduled' && 
+                        new Date(group.scheduled_date) < new Date();
+                      const isToday = group.scheduled_date === 
                         new Date().toISOString().split('T')[0];
                       
                       return (
-                        <tr key={schedule.id}>
+                        <tr key={group.scheduleIds.join('-')}>
                           <td className="student-column">
-                            <div className="font-medium">{schedule.students?.name}</div>
-                            <div className="text-sm text-secondary">{schedule.students?.grade}年生</div>
+                            {group.students.length === 1 ? (
+                              <>
+                                <div className="font-medium">{group.students[0]?.name}</div>
+                                <div className="text-sm text-secondary">{group.students[0]?.grade}年生</div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="font-medium">{group.students.length}名の生徒</div>
+                                <div className="text-sm text-secondary">
+                                  {group.students.map(student => student?.name).join(', ')}
+                                </div>
+                              </>
+                            )}
                           </td>
                           
-                          <td className="teacher-column">{schedule.users?.name}</td>
+                          <td className="teacher-column">{group.users?.name}</td>
                           
                           <td className="content-column">
                             <div className={`font-medium ${isOverdue ? 'text-error' : ''} ${isToday ? 'text-blue-600' : ''}`}>
-                              {new Date(schedule.scheduled_date).toLocaleDateString()} {schedule.start_time.substring(0, 5)}-{schedule.end_time.substring(0, 5)}
+                              {new Date(group.scheduled_date).toLocaleDateString()} {group.start_time.substring(0, 5)}-{group.end_time.substring(0, 5)}
                             </div>
                             <div className="text-sm text-secondary">
-                              {schedule.subject}
+                              {group.subject}
                             </div>
-                            {schedule.topic && (
+                            {group.topic && (
                               <div className="text-sm">
-                                {schedule.topic}
+                                {group.topic}
                               </div>
                             )}
                             <div className="flex items-center gap-2 mt-1">
                               <span className={`btn btn-sm ${
-                                schedule.status === 'scheduled' ? 'btn-secondary' :
-                                schedule.status === 'completed' ? 'btn-success' :
-                                schedule.status === 'cancelled' ? 'btn-error' :
+                                group.status === 'scheduled' ? 'btn-secondary' :
+                                group.status === 'completed' ? 'btn-success' :
+                                group.status === 'cancelled' ? 'btn-error' :
                                 'btn-secondary'
                               }`}>
-                                {getStatusText(schedule.status)}
+                                {getStatusText(group.status)}
                               </span>
                               {isOverdue && (
                                 <span className="text-sm text-error font-medium">期限切れ</span>
@@ -377,26 +518,55 @@ const TeachingSchedules = () => {
                           
                           <td className="actions-column">
                             <div className="flex gap-2">
-                              {schedule.status === 'scheduled' && (
-                                <button 
-                                  className="btn-text text-green"
-                                  onClick={() => handleComplete(schedule)}
-                                >
-                                  完了
-                                </button>
+                              {group.students.length === 1 ? (
+                                <>
+                                  {group.status === 'scheduled' && (
+                                    <button 
+                                      className="btn-text text-green"
+                                      onClick={() => handleComplete(group.allSchedules[0])}
+                                    >
+                                      完了
+                                    </button>
+                                  )}
+                                  <button 
+                                    className="btn-text text-green"
+                                    onClick={() => handleEdit(group.allSchedules[0])}
+                                  >
+                                    編集
+                                  </button>
+                                  <button 
+                                    className="btn-text text-error"
+                                    onClick={() => handleDelete(group.allSchedules[0].id)}
+                                  >
+                                    削除
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex flex-col gap-1">
+                                    {group.status === 'scheduled' && (
+                                      <button 
+                                        className="btn-text text-green text-sm"
+                                        onClick={() => handleBulkComplete(group)}
+                                      >
+                                        一括完了
+                                      </button>
+                                    )}
+                                    <button 
+                                      className="btn-text text-green text-sm"
+                                      onClick={() => handleBulkEdit(group)}
+                                    >
+                                      一括編集
+                                    </button>
+                                    <button 
+                                      className="btn-text text-error text-sm"
+                                      onClick={() => handleBulkDelete(group)}
+                                    >
+                                      一括削除
+                                    </button>
+                                  </div>
+                                </>
                               )}
-                              <button 
-                                className="btn-text text-green"
-                                onClick={() => handleEdit(schedule)}
-                              >
-                                編集
-                              </button>
-                              <button 
-                                className="btn-text text-error"
-                                onClick={() => handleDelete(schedule.id)}
-                              >
-                                削除
-                              </button>
                             </div>
                           </td>
                         </tr>
@@ -429,19 +599,25 @@ const TeachingSchedules = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="form-group">
                       <label className="form-label">生徒 *</label>
-                      <select
-                        value={formData.student_id}
-                        onChange={(e) => setFormData({...formData, student_id: e.target.value})}
-                        required
-                        className="form-select"
-                      >
-                        <option value="">生徒を選択</option>
-                        {students.map(student => (
-                          <option key={student.id} value={student.id}>
-                            {student.name} ({student.grade}年)
-                          </option>
-                        ))}
-                      </select>
+                      {formData.student_id === 'bulk' ? (
+                        <div className="form-input bg-gray-100 p-2 rounded">
+                          一括編集中（複数の生徒）
+                        </div>
+                      ) : (
+                        <select
+                          value={formData.student_id}
+                          onChange={(e) => setFormData({...formData, student_id: e.target.value})}
+                          required
+                          className="form-select"
+                        >
+                          <option value="">生徒を選択</option>
+                          {students.map(student => (
+                            <option key={student.id} value={student.id}>
+                              {student.name} ({student.grade}年)
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     <div className="form-group">

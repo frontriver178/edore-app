@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { useSearchParams, Link } from 'react-router-dom';
 import Button from '../components/Button';
+import FullPageLoader from '../components/FullPageLoader';
 import SupabaseTestConnection from '../components/SupabaseTestConnection';
+import { handleError } from '../utils/errorHandler';
+import logger from '../utils/logger';
 
 // 科目表示コンポーネント
 const SubjectsDisplay = ({ subjects }) => {
@@ -80,6 +83,7 @@ const MockExamResults = () => {
   const [editingResult, setEditingResult] = useState(null);
   const [filterExam, setFilterExam] = useState('');
   const [filterStudent, setFilterStudent] = useState('');
+  const [organizationId, setOrganizationId] = useState(null);
   const [searchParams] = useSearchParams();
   const preSelectedStudentId = searchParams.get('student');
   const [showDebugPanel, setShowDebugPanel] = useState(false);
@@ -92,55 +96,47 @@ const MockExamResults = () => {
     notes: ''
   });
 
+  // ログインユーザーのorganization_idを取得
+  useEffect(() => {
+    const fetchOrganizationId = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('organization_id')
+            .eq('id', user.id)
+            .single();
+          
+          if (error) throw error;
+          if (userData) {
+            setOrganizationId(userData.organization_id);
+          }
+        }
+      } catch (error) {
+        handleError(error, 'Organization ID Fetch', { userId: null });
+      }
+    };
+
+    fetchOrganizationId();
+  }, []);
+
   const fetchData = useCallback(async () => {
+    if (!organizationId) return;
+    
     try {
       setLoading(true);
       
-      console.log('🔄 データ取得開始...');
+      logger.debug('データ取得開始', 'MockExamResults', { organizationId });
       
-      // データベース接続テスト
-      console.log('🔍 データベース接続テスト...');
-      const { data: testData, error: testError } = await supabase
-        .from('organizations')
-        .select('count')
-        .limit(1);
-      
-      console.log('📊 接続テスト結果:', { testData, testError });
-      
-      if (testError) {
-        console.error('❌ データベース接続エラー:', testError);
-        if (testError.code === '42P01') {
-          alert('エラー: organizationsテーブルが存在しません。データベースセットアップが必要です。');
-          return;
-        }
-        throw testError;
-      }
-      
-      // 組織データの存在確認
-      console.log('🏢 組織データ確認中...');
-      const { data: orgData, error: orgListError } = await supabase
-        .from('organizations')
-        .select('*');
-      
-      console.log('🏢 組織データ:', { count: orgData?.length, data: orgData, error: orgListError });
-      
-      if (orgListError) {
-        console.error('❌ 組織データ取得エラー:', orgListError);
-        throw orgListError;
-      }
-      
-      if (!orgData || orgData.length === 0) {
-        console.warn('⚠️ 組織データが存在しません');
-        alert('組織データが存在しません。まずは組織のセットアップが必要です。');
-      }
-      
-      // 模試結果を取得（グループ化された結果）
+      // 模試結果を取得（組織IDで絞り込み）
       let resultsQuery = supabase
         .from('mock_exam_results')
         .select(`
           *,
           students(name, grade)
         `)
+        .eq('organization_id', organizationId)
         .order('exam_date', { ascending: false });
 
       // 特定の生徒が指定されている場合はフィルタリング
@@ -148,17 +144,16 @@ const MockExamResults = () => {
         resultsQuery = resultsQuery.eq('student_id', preSelectedStudentId);
       }
 
-      console.log('📝 模試結果クエリ実行中...');
+      logger.debug('模試結果クエリ実行中', 'MockExamResults');
       const { data: resultsData, error: resultsError } = await resultsQuery;
 
-      console.log('📝 模試結果取得結果:', { 
+      logger.debug('模試結果取得結果', 'MockExamResults', { 
         dataCount: resultsData?.length, 
-        error: resultsError,
-        sampleData: resultsData?.slice(0, 2)
+        hasError: !!resultsError
       });
 
       if (resultsError) {
-        console.error('模試結果取得エラー:', resultsError);
+        handleError(resultsError, 'Mock Exam Results Fetch', { organizationId, preSelectedStudentId });
         if (resultsError.code === '42P01') {
           alert('エラー: mock_exam_resultsテーブルが存在しません。データベースセットアップが必要です。');
           return;
@@ -168,17 +163,18 @@ const MockExamResults = () => {
 
       // 結果をグループ化（同じ模試をまとめる）
       const groupedResults = groupMockExamResults(resultsData || []);
-      console.log('📊 グループ化結果:', { count: groupedResults.length });
+      console.log('グループ化結果:', { count: groupedResults.length });
 
-      // 生徒一覧を取得
-      console.log('👥 生徒一覧取得中...');
+      // 生徒一覧を取得（組織IDで絞り込み）
+      console.log('生徒一覧取得中...');
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select('id, name, grade')
         .eq('status', 'active')
+        .eq('organization_id', organizationId)
         .order('grade', { ascending: true });
 
-      console.log('👥 生徒一覧取得結果:', { 
+      console.log('生徒一覧取得結果:', { 
         dataCount: studentsData?.length, 
         error: studentsError 
       });
@@ -207,7 +203,7 @@ const MockExamResults = () => {
     } finally {
       setLoading(false);
     }
-  }, [preSelectedStudentId]);
+  }, [organizationId, preSelectedStudentId]);
 
   useEffect(() => {
     fetchData();
@@ -264,29 +260,14 @@ const MockExamResults = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!organizationId) {
+      alert('組織情報が取得できていません');
+      return;
+    }
+    
     try {
       console.log('🚀 模試結果保存開始...');
       console.log('📝 フォームデータ:', formData);
-      
-      // 組織IDを動的に取得
-      console.log('🏢 組織情報取得中...');
-      const { data: organizations, error: orgError } = await supabase
-        .from('organizations')
-        .select('id')
-        .limit(1);
-      
-      console.log('🏢 組織情報取得結果:', { organizations, orgError });
-      
-      if (orgError) {
-        console.error('❌ 組織情報取得エラー:', orgError);
-        throw orgError;
-      }
-      
-      if (!organizations || organizations.length === 0) {
-        console.error('❌ 組織情報が見つかりません');
-        alert('組織情報が見つかりません');
-        return;
-      }
 
       // 生徒の学年を取得
       console.log('👤 生徒情報取得中...', formData.student_id);
@@ -323,7 +304,7 @@ const MockExamResults = () => {
       if (formData.overall_deviation) {
         console.log('📊 総合偏差値レコード追加...');
         resultRecords.push({
-          organization_id: organizations[0].id,
+          organization_id: organizationId,
           student_id: formData.student_id,
           exam_name: formData.exam_name,
           exam_date: formData.exam_date,
@@ -341,7 +322,7 @@ const MockExamResults = () => {
         .forEach((subjectItem, index) => {
           console.log(`📚 科目${index + 1}:`, subjectItem);
           resultRecords.push({
-            organization_id: organizations[0].id,
+            organization_id: organizationId,
             student_id: formData.student_id,
             exam_name: formData.exam_name,
             exam_date: formData.exam_date,
@@ -526,7 +507,7 @@ const MockExamResults = () => {
   };
 
   if (loading) {
-    return <div className="loading">読み込み中...</div>;
+    return <FullPageLoader message="模試結果を読み込み中..." />
   }
 
   // 選択されている生徒の情報を取得

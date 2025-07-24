@@ -1,0 +1,120 @@
+import { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from '../supabaseClient'
+
+const AuthContext = createContext({})
+
+export const useAuth = () => {
+  return useContext(AuthContext)
+}
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [userRole, setUserRole] = useState(null)
+  const [organizationId, setOrganizationId] = useState(null)
+
+  const clearError = () => setError(null)
+
+  // ユーザー情報をDBから取得
+  const fetchUserData = async (user) => {
+    if (!user) {
+      setUserRole(null)
+      setOrganizationId(null)
+      return
+    }
+
+    try {
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('role, organization_id')
+        .eq('id', user.id)
+        .single()
+
+      if (userData && !error) {
+        setUserRole(userData.role)
+        setOrganizationId(userData.organization_id)
+      } else {
+        console.error('ユーザーデータの取得に失敗:', error)
+        setUserRole(null)
+        setOrganizationId(null)
+      }
+    } catch (err) {
+      console.error('ユーザーデータの取得エラー:', err)
+      setUserRole(null)
+      setOrganizationId(null)
+    }
+  }
+
+  useEffect(() => {
+    // 初期認証状態の取得
+    const getUser = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error) {
+          setError(error.message)
+        } else {
+          setUser(user)
+          setError(null)
+          await fetchUserData(user)
+        }
+      } catch (err) {
+        setError('認証状態の取得に失敗しました')
+        console.error('認証エラー:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    getUser()
+
+    // 認証状態の変更を監視
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        try {
+          setUser(session?.user ?? null)
+          setError(null)
+          await fetchUserData(session?.user ?? null)
+        } catch (err) {
+          setError('認証状態の変更処理に失敗しました')
+          console.error('認証状態変更エラー:', err)
+        } finally {
+          setLoading(false)
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const signOut = async () => {
+    try {
+      setError(null)
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        setError(error.message)
+        throw error
+      }
+    } catch (err) {
+      setError('ログアウトに失敗しました')
+      console.error('ログアウトエラー:', err)
+      throw err
+    }
+  }
+
+  const value = {
+    user,
+    userRole,
+    organizationId,
+    loading,
+    error,
+    signOut,
+    clearError
+  }
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  )
+}

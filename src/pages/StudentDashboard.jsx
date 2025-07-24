@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import Button from '../components/Button';
+import FullPageLoader from '../components/FullPageLoader';
 import StudentCalendar from '../components/StudentCalendar';
 
 // 科目表示コンポーネント
@@ -12,7 +13,7 @@ const SubjectsDisplay = ({ subjects }) => {
   if (!subjects || subjects.length === 0) {
     return (
       <div className="subjects-display">
-        <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
+        <div className="subjects-display-empty">
           -
         </div>
       </div>
@@ -28,13 +29,7 @@ const SubjectsDisplay = ({ subjects }) => {
   
   return (
     <div className="subjects-display">
-      <div style={{ 
-        minHeight: '32px', 
-        display: 'flex', 
-        flexWrap: 'wrap', 
-        alignContent: 'flex-start',
-        transition: 'all 0.3s ease'
-      }}>
+      <div className="subjects-display-container">
         {visibleSubjects.map((subject, index) => (
           <span key={index} className="subject-item">
             {subject.subject}: {subject.deviation_value}
@@ -86,11 +81,7 @@ const StudentDashboard = () => {
   // 仮の組織ID（実際はAuthContextから取得）
   const organizationId = '11111111-1111-1111-1111-111111111111';
 
-  useEffect(() => {
-    fetchStudentData();
-  }, [studentId]);
-
-  const fetchStudentData = async () => {
+  const fetchStudentData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -191,6 +182,8 @@ const StudentDashboard = () => {
 
       if (teachingSchedulesError) throw teachingSchedulesError;
 
+
+
       setStudent(studentData);
       setInterviews(interviewsData || []);
       setTeachingRecords(teachingData || []);
@@ -204,7 +197,11 @@ const StudentDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [studentId]);
+
+  useEffect(() => {
+    fetchStudentData();
+  }, [studentId, fetchStudentData]);
 
   // スケジュール更新時のコールバック
   const handleScheduleUpdate = () => {
@@ -299,8 +296,9 @@ const StudentDashboard = () => {
 
   const taskStats = calculateTaskStats();
 
+
   if (loading) {
-    return <div className="loading">読み込み中...</div>;
+    return <FullPageLoader message="生徒データを読み込み中..." />
   }
 
   if (!student) {
@@ -364,7 +362,7 @@ const StudentDashboard = () => {
         </div>
 
         {/* 概要統計 */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-5 gap-4 mb-6">
           {/* 面談記録サマリー */}
           <div className="stats-card">
             <div className="stats-card-value">{interviews.length}</div>
@@ -410,6 +408,7 @@ const StudentDashboard = () => {
                 : '記録なし'}
             </div>
           </div>
+
         </div>
 
         <div className="grid grid-cols-3 gap-6">
@@ -552,6 +551,7 @@ const StudentDashboard = () => {
           </div>
         </div>
 
+
         {/* カレンダー */}
         <div className="card">
           <div className="card-header">
@@ -663,6 +663,7 @@ const StudentDashboard = () => {
             )}
           </div>
         </div>
+
       </div>
     </div>
   );

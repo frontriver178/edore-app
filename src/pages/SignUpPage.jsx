@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/Button';
+import { handleError, parseError } from '../utils/errorHandler';
 
 const SignUpPage = () => {
   const [email, setEmail] = useState('');
@@ -10,41 +12,69 @@ const SignUpPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const { clearError } = useAuth();
   const navigate = useNavigate();
+
+  const validateForm = () => {
+    if (!email || !password || !confirmPassword) {
+      setError('全ての項目を入力してください');
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      setError('パスワードが一致しません');
+      return false;
+    }
+
+    if (password.length < 6) {
+      setError('パスワードは6文字以上で入力してください');
+      return false;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('有効なメールアドレスを入力してください');
+      return false;
+    }
+
+    return true;
+  };
 
   const handleSignUp = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    clearError();
 
-    if (password !== confirmPassword) {
-      setError('パスワードが一致しません');
+    if (!validateForm()) {
       setLoading(false);
       return;
     }
 
-    if (password.length < 6) {
-      setError('パスワードは6文字以上で入力してください');
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        const parsedError = parseError(error);
+        setError(parsedError.message);
+        handleError(error, 'SignUp', { email });
+      } else {
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/register');
+        }, 2000);
+      }
+    } catch (err) {
+      const parsedError = handleError(err, 'SignUp Exception', { email });
+      setError(parsedError.message);
+    } finally {
       setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setSuccess(true);
-      setTimeout(() => {
-        navigate('/register');
-      }, 2000);
     }
   };
+
+
 
   if (success) {
     return (
@@ -68,47 +98,47 @@ const SignUpPage = () => {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f5f5f5' }}>
-      <div style={{ background: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', minWidth: '400px' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '2rem', color: '#333' }}>Edore サインアップ</h2>
+    <div className="auth-container">
+      <div className="auth-card">
+        <h2 className="auth-header">Edore サインアップ</h2>
         
         {error && (
-          <div style={{ color: 'red', marginBottom: '1rem', padding: '0.5rem', background: '#ffebee', borderRadius: '4px' }}>
+          <div className="auth-message error">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSignUp}>
-          <div style={{ marginBottom: '1rem' }}>
+        <form onSubmit={handleSignUp} className="auth-form">
+          <div className="auth-form-group">
             <input
               type="email"
               placeholder="メールアドレス"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px' }}
+              className="auth-form-input"
             />
           </div>
           
-          <div style={{ marginBottom: '1rem' }}>
+          <div className="auth-form-group">
             <input
               type="password"
               placeholder="パスワード（6文字以上）"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px' }}
+              className="auth-form-input"
             />
           </div>
 
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div className="auth-form-group last">
             <input
               type="password"
               placeholder="パスワード（確認用）"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px' }}
+              className="auth-form-input"
             />
           </div>
 
@@ -117,18 +147,18 @@ const SignUpPage = () => {
             variant="primary" 
             disabled={loading}
             loading={loading}
-            style={{ width: '100%', marginBottom: '1rem' }}
+            className="auth-button primary"
           >
             サインアップ
           </Button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-          <p style={{ color: '#666', fontSize: '0.9rem' }}>
+        <div className="auth-footer">
+          <p className="auth-footer-text">
             すでにアカウントをお持ちですか？{' '}
             <button 
               onClick={() => navigate('/login')}
-              style={{ color: '#4CAF50', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}
+              className="auth-link"
             >
               ログインはこちら
             </button>

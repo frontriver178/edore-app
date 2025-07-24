@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import Button from './Button';
 
@@ -36,13 +36,7 @@ const BulkScheduleModal = ({
     '日本史', '世界史', '地理', '現代社会', '政治経済', '倫理', '小論文'
   ];
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchStudentsAndTeachers();
-    }
-  }, [isOpen]);
-
-  const fetchStudentsAndTeachers = async () => {
+  const fetchStudentsAndTeachers = useCallback(async () => {
     try {
       // 生徒一覧取得
       const { data: studentsData, error: studentsError } = await supabase
@@ -70,7 +64,13 @@ const BulkScheduleModal = ({
       console.error('データ取得エラー:', error);
       alert('データの取得に失敗しました');
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchStudentsAndTeachers();
+    }
+  }, [isOpen, fetchStudentsAndTeachers]);
 
   const handleStudentSelection = (studentId) => {
     setSelectedStudents(prev => {

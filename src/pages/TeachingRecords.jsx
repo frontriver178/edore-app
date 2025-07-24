@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useSearchParams, Link } from 'react-router-dom';
 import Button from '../components/Button';
+import FullPageLoader from '../components/FullPageLoader';
+import { useAuth } from '../contexts/AuthContext';
+import { useAppData } from '../contexts/AppDataContext';
 
 const TeachingRecords = () => {
   const [records, setRecords] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -14,7 +15,8 @@ const TeachingRecords = () => {
   const [filterStudent, setFilterStudent] = useState('');
   const [searchParams] = useSearchParams();
   const preSelectedStudentId = searchParams.get('student');
-  const [organizationId, setOrganizationId] = useState(null);
+  const { organizationId } = useAuth();
+  const { students, teachers, isDataReady } = useAppData();
   const [formData, setFormData] = useState({
     student_id: preSelectedStudentId || '',
     teacher_id: '',
@@ -22,42 +24,23 @@ const TeachingRecords = () => {
     lesson_content: ''
   });
 
-  // ログインユーザーのorganization_idを取得
-  useEffect(() => {
-    const fetchOrganizationId = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('organization_id')
-            .eq('id', user.id)
-            .single();
-          
-          if (error) throw error;
-          if (userData) {
-            setOrganizationId(userData.organization_id);
-          }
-        }
-      } catch (error) {
-        console.error('組織ID取得エラー:', error);
-      }
-    };
-
-    fetchOrganizationId();
-  }, []);
 
   useEffect(() => {
     if (organizationId) {
+      console.log('🚀 TeachingRecords: organizationId取得完了、データ読み込み開始', organizationId);
       fetchData();
+    } else {
+      console.log('⏳ TeachingRecords: organizationId待機中');
     }
   }, [organizationId]);
 
   const fetchData = async () => {
     try {
+      console.log('📊 TeachingRecords: 指導記録取得開始');
+      const fetchStart = performance.now();
       setLoading(true);
       
-      // 指導記録を取得
+      // 指導記録のみ取得（生徒・講師データはAppDataContextから使用）
       let recordsQuery = supabase
         .from('teaching_records')
         .select(`
@@ -66,7 +49,7 @@ const TeachingRecords = () => {
           users(name)
         `)
         .eq('organization_id', organizationId)
-        .order('lesson_date', { ascending: false });
+        .order('created_at', { ascending: false });
 
       // 特定の生徒が指定されている場合はフィルタリング
       if (preSelectedStudentId) {
@@ -77,31 +60,16 @@ const TeachingRecords = () => {
 
       if (recordsError) throw recordsError;
 
-      // 生徒一覧を取得（組織で絞り込み）
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('id, name, grade')
-        .eq('status', 'active')
-        .eq('organization_id', organizationId)
-        .order('grade', { ascending: true });
-
-      if (studentsError) throw studentsError;
-
-      // 講師一覧を取得（組織で絞り込み）
-      const { data: teachersData, error: teachersError } = await supabase
-        .from('users')
-        .select('id, name')
-        .in('role', ['admin', 'teacher'])
-        .eq('organization_id', organizationId)
-        .order('name', { ascending: true });
-
-      if (teachersError) throw teachersError;
-
       setRecords(recordsData || []);
-      setStudents(studentsData || []);
-      setTeachers(teachersData || []);
+      
+      const fetchEnd = performance.now();
+      console.log(`✅ TeachingRecords: 指導記録取得完了 ${(fetchEnd - fetchStart).toFixed(2)}ms`, {
+        records: recordsData?.length || 0,
+        studentsFromContext: students?.length || 0,
+        teachersFromContext: teachers?.length || 0
+      });
     } catch (error) {
-      console.error('データ取得エラー:', error);
+      console.error('❌ TeachingRecords: データ取得エラー:', error);
       alert('データの取得に失敗しました');
     } finally {
       setLoading(false);
@@ -214,8 +182,8 @@ const TeachingRecords = () => {
   // 科目一覧取得（フィルタ用）
   const subjects = [...new Set(records.map(record => record.subject))].sort();
 
-  if (loading) {
-    return <div className="loading">読み込み中...</div>;
+  if (!isDataReady && loading) {
+    return <FullPageLoader message="指導記録を読み込み中..." />
   }
 
   // 選択されている生徒の情報を取得

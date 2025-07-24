@@ -1,0 +1,665 @@
+import { useEffect, useState, useCallback } from 'react';
+import { supabase } from '../supabaseClient';
+import { Link } from 'react-router-dom';
+import Button from '../components/Button';
+import { useAuth } from '../contexts/AuthContext';
+import RoleBasedAccess from '../components/RoleBasedAccess';
+import { validateOrganizationId } from '../utils/validation';
+import PerformanceDebugger from '../components/PerformanceDebugger';
+
+const StudentList = () => {
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('all');
+  const { organizationId, userRole, loading: authLoading } = useAuth();
+
+  // 新規生徒追加用state
+  const [newStudent, setNewStudent] = useState({
+    name: '',
+    grade: '',
+    target_school: '',
+    parent_phone: '',
+    parent_email: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    notes: ''
+  });
+
+  // 生徒編集用state
+  const [editStudent, setEditStudent] = useState({
+    name: '',
+    grade: '',
+    target_school: '',
+    parent_phone: '',
+    parent_email: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    notes: ''
+  });
+
+  // 生徒一覧を取得
+  const fetchStudents = async () => {
+    const validation = validateOrganizationId(organizationId);
+    if (!validation.isValid) {
+      console.error('組織ID検証エラー:', validation.message);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const queryStart = performance.now();
+      const { data, error, count } = await supabase
+        .from('students')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', organizationId)
+        .eq('status', 'active')
+        .order('grade', { ascending: true });
+      const queryEnd = performance.now();
+      
+      console.log(`Supabase生徒データ取得完了: ${(queryEnd - queryStart).toFixed(2)}ms`);
+
+      if (error) throw error;
+      
+      console.log(`取得した生徒数: ${count}`);
+      setStudents(data || []);
+    } catch (error) {
+      console.error('生徒取得エラー:', error);
+      alert('生徒一覧の取得に失敗しました: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // フィルタリングされた生徒一覧を取得
+  const getFilteredStudents = () => {
+    return students.filter(student => {
+      const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (student.target_school && student.target_school.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesGrade = gradeFilter === 'all' || student.grade.toString() === gradeFilter;
+      return matchesSearch && matchesGrade;
+    });
+  };
+
+  const [hasFetched, setHasFetched] = useState(false);
+
+  useEffect(() => {
+    // 認証中は待機
+    if (authLoading) {
+      return;
+    }
+    
+    // organizationIdがnullまたは未定義の場合はスキップ
+    if (!organizationId) {
+      setLoading(false);
+      return;
+    }
+    
+    // 既に取得済みの場合はスキップ
+    if (hasFetched) {
+      return;
+    }
+    
+    console.log('生徒データの取得を開始します。組織ID:', organizationId);
+    const startTime = performance.now();
+    
+    fetchStudents().then(() => {
+      const endTime = performance.now();
+      console.log(`生徒データ取得完了。所要時間: ${(endTime - startTime).toFixed(2)}ms`);
+      setHasFetched(true);
+    });
+  }, [organizationId, authLoading, hasFetched]);
+
+  // 新規生徒追加
+  const handleAddStudent = async (e) => {
+    e.preventDefault();
+    
+    const validation = validateOrganizationId(organizationId);
+    if (!validation.isValid) {
+      alert('組織IDが無効です。管理者にお問い合わせください。');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('students')
+        .insert({
+          organization_id: organizationId,
+          name: newStudent.name,
+          grade: Number(newStudent.grade),
+          target_school: newStudent.target_school,
+          parent_phone: newStudent.parent_phone,
+          parent_email: newStudent.parent_email,
+          emergency_contact_name: newStudent.emergency_contact_name,
+          emergency_contact_phone: newStudent.emergency_contact_phone,
+          notes: newStudent.notes,
+          status: 'active'
+        });
+
+      if (error) throw error;
+
+      alert('生徒が正常に追加されました');
+      setNewStudent({
+        name: '',
+        grade: '',
+        target_school: '',
+        parent_phone: '',
+        parent_email: '',
+        emergency_contact_name: '',
+        emergency_contact_phone: '',
+        notes: ''
+      });
+      setShowAddForm(false);
+      
+      // データ再取得時はhasFetchedをリセット
+      setHasFetched(false);
+      fetchStudents();
+
+    } catch (error) {
+      console.error('生徒追加エラー:', error);
+      alert('生徒の追加に失敗しました: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 生徒編集
+  const handleEditStudent = async (e) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({
+          name: editStudent.name,
+          grade: Number(editStudent.grade),
+          target_school: editStudent.target_school,
+          parent_phone: editStudent.parent_phone,
+          parent_email: editStudent.parent_email,
+          emergency_contact_name: editStudent.emergency_contact_name,
+          emergency_contact_phone: editStudent.emergency_contact_phone,
+          notes: editStudent.notes
+        })
+        .eq('id', editingStudent.id);
+
+      if (error) throw error;
+
+      alert('生徒情報が更新されました');
+      setShowEditForm(false);
+      setEditingStudent(null);
+      
+      // データ再取得時はhasFetchedをリセット
+      setHasFetched(false);
+      fetchStudents();
+
+    } catch (error) {
+      console.error('生徒更新エラー:', error);
+      alert('生徒の更新に失敗しました: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 編集フォームを開く
+  const openEditForm = (student) => {
+    setEditingStudent(student);
+    setEditStudent({
+      name: student.name || '',
+      grade: student.grade || '',
+      target_school: student.target_school || '',
+      parent_phone: student.parent_phone || '',
+      parent_email: student.parent_email || '',
+      emergency_contact_name: student.emergency_contact_name || '',
+      emergency_contact_phone: student.emergency_contact_phone || '',
+      notes: student.notes || ''
+    });
+    setShowEditForm(true);
+  };
+
+  // 生徒削除
+  const handleDeleteStudent = async (studentId, studentName) => {
+    if (!window.confirm(`${studentName}を削除してもよろしいですか？`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ status: 'inactive' })
+        .eq('id', studentId);
+
+      if (error) throw error;
+
+      alert('生徒が削除されました');
+      
+      // データ再取得時はhasFetchedをリセット
+      setHasFetched(false);
+      fetchStudents();
+
+    } catch (error) {
+      console.error('生徒削除エラー:', error);
+      alert('生徒の削除に失敗しました');
+    }
+  };
+
+  // 認証情報の読み込み中または生徒データの読み込み中
+  if (authLoading || (loading && !students.length)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="spinner"></div>
+          <p className="mt-2 text-gray-600">
+            {authLoading ? '認証情報を確認中...' : '生徒データを読み込み中...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <RoleBasedAccess allowedRoles={['admin', 'teacher']}>
+      <div className="main-content">
+        <div className="toolbar">
+          <h1>生徒管理</h1>
+          <Button
+            onClick={() => setShowAddForm(!showAddForm)}
+            variant="primary"
+          >
+            {showAddForm ? '✕ キャンセル' : '➕ 生徒追加'}
+          </Button>
+        </div>
+
+        <div className="content-area">
+          {/* 検索・フィルタリング */}
+          <div className="card mb-6">
+            <div className="card-content">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="form-group">
+                  <label className="form-label">検索</label>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="form-input"
+                    placeholder="名前または志望校で検索"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">学年</label>
+                  <select
+                    value={gradeFilter}
+                    onChange={(e) => setGradeFilter(e.target.value)}
+                    className="form-select"
+                  >
+                    <option value="all">すべて</option>
+                    {[1, 2, 3, 4, 5, 6].map(grade => (
+                      <option key={grade} value={grade}>{grade}年生</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">結果</label>
+                  <div className="form-input bg-gray-50">
+                    {getFilteredStudents().length}件の生徒
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 生徒追加フォーム */}
+          {showAddForm && (
+            <div className="card mb-6">
+              <div className="card-header">
+                <h3 className="card-title">新規生徒追加</h3>
+              </div>
+              <div className="card-content">
+                <form onSubmit={handleAddStudent}>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="form-group">
+                      <label className="form-label">名前 *</label>
+                      <input
+                        type="text"
+                        value={newStudent.name}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, name: e.target.value }))}
+                        className="form-input"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">学年 *</label>
+                      <select
+                        value={newStudent.grade}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, grade: e.target.value }))}
+                        className="form-select"
+                        required
+                      >
+                        <option value="">選択してください</option>
+                        {[1, 2, 3, 4, 5, 6].map(grade => (
+                          <option key={grade} value={grade}>{grade}年生</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="form-group">
+                      <label className="form-label">志望校</label>
+                      <input
+                        type="text"
+                        value={newStudent.target_school}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, target_school: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">保護者電話番号</label>
+                      <input
+                        type="text"
+                        value={newStudent.parent_phone}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, parent_phone: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="form-group">
+                      <label className="form-label">保護者メールアドレス</label>
+                      <input
+                        type="email"
+                        value={newStudent.parent_email}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, parent_email: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">緊急連絡先名</label>
+                      <input
+                        type="text"
+                        value={newStudent.emergency_contact_name}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, emergency_contact_name: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group mb-4">
+                    <label className="form-label">緊急連絡先電話番号</label>
+                    <input
+                      type="text"
+                      value={newStudent.emergency_contact_phone}
+                      onChange={(e) => setNewStudent(prev => ({ ...prev, emergency_contact_phone: e.target.value }))}
+                      className="form-input"
+                    />
+                  </div>
+
+                  <div className="form-group mb-4">
+                    <label className="form-label">備考</label>
+                    <textarea
+                      value={newStudent.notes}
+                      onChange={(e) => setNewStudent(prev => ({ ...prev, notes: e.target.value }))}
+                      className="form-textarea"
+                      rows="3"
+                      placeholder="生徒に関する備考"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      loading={loading}
+                      variant="primary"
+                    >
+                      生徒を追加
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => setShowAddForm(false)}
+                      variant="secondary"
+                    >
+                      キャンセル
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* 生徒編集フォーム */}
+          {showEditForm && editingStudent && (
+            <div className="card mb-6">
+              <div className="card-header">
+                <h3 className="card-title">生徒情報編集</h3>
+              </div>
+              <div className="card-content">
+                <form onSubmit={handleEditStudent}>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="form-group">
+                      <label className="form-label">名前 *</label>
+                      <input
+                        type="text"
+                        value={editStudent.name}
+                        onChange={(e) => setEditStudent(prev => ({ ...prev, name: e.target.value }))}
+                        className="form-input"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">学年 *</label>
+                      <select
+                        value={editStudent.grade}
+                        onChange={(e) => setEditStudent(prev => ({ ...prev, grade: e.target.value }))}
+                        className="form-select"
+                        required
+                      >
+                        <option value="">選択してください</option>
+                        {[1, 2, 3, 4, 5, 6].map(grade => (
+                          <option key={grade} value={grade}>{grade}年生</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="form-group">
+                      <label className="form-label">志望校</label>
+                      <input
+                        type="text"
+                        value={editStudent.target_school}
+                        onChange={(e) => setEditStudent(prev => ({ ...prev, target_school: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">保護者電話番号</label>
+                      <input
+                        type="text"
+                        value={editStudent.parent_phone}
+                        onChange={(e) => setEditStudent(prev => ({ ...prev, parent_phone: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="form-group">
+                      <label className="form-label">保護者メールアドレス</label>
+                      <input
+                        type="email"
+                        value={editStudent.parent_email}
+                        onChange={(e) => setEditStudent(prev => ({ ...prev, parent_email: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">緊急連絡先名</label>
+                      <input
+                        type="text"
+                        value={editStudent.emergency_contact_name}
+                        onChange={(e) => setEditStudent(prev => ({ ...prev, emergency_contact_name: e.target.value }))}
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group mb-4">
+                    <label className="form-label">緊急連絡先電話番号</label>
+                    <input
+                      type="text"
+                      value={editStudent.emergency_contact_phone}
+                      onChange={(e) => setEditStudent(prev => ({ ...prev, emergency_contact_phone: e.target.value }))}
+                      className="form-input"
+                    />
+                  </div>
+
+                  <div className="form-group mb-4">
+                    <label className="form-label">備考</label>
+                    <textarea
+                      value={editStudent.notes}
+                      onChange={(e) => setEditStudent(prev => ({ ...prev, notes: e.target.value }))}
+                      className="form-textarea"
+                      rows="3"
+                      placeholder="生徒に関する備考"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      loading={loading}
+                      variant="primary"
+                    >
+                      更新
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => setShowEditForm(false)}
+                      variant="secondary"
+                    >
+                      キャンセル
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* 生徒一覧 */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">生徒一覧</h3>
+            </div>
+            <div className="card-content">
+              <div className="overflow-x-auto">
+                <table className="spreadsheet-table">
+                  <thead>
+                    <tr>
+                      <th>名前</th>
+                      <th>学年</th>
+                      <th>志望校</th>
+                      <th>連絡先</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getFilteredStudents().length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center text-light py-8">
+                          {searchTerm || gradeFilter !== 'all' ? '条件に一致する生徒が見つかりません' : '生徒が登録されていません'}
+                        </td>
+                      </tr>
+                    ) : (
+                      getFilteredStudents().map((student) => (
+                        <tr key={student.id}>
+                          <td>
+                            <Link to={`/students/${student.id}`} className="text-green">
+                              {student.name}
+                            </Link>
+                            {student.notes && (
+                              <div className="text-sm text-gray-500 truncate" title={student.notes}>
+                                {student.notes.length > 30 ? student.notes.substring(0, 30) + '...' : student.notes}
+                              </div>
+                            )}
+                          </td>
+                          <td>{student.grade}年生</td>
+                          <td>{student.target_school || '-'}</td>
+                          <td>
+                            <div className="text-sm space-y-1">
+                              {student.parent_phone && (
+                                <div>📱 {student.parent_phone}</div>
+                              )}
+                              {student.parent_email && (
+                                <div>✉️ {student.parent_email}</div>
+                              )}
+                              {student.emergency_contact_name && (
+                                <div className="text-red-600">
+                                  🚨 {student.emergency_contact_name}
+                                  {student.emergency_contact_phone && ` (${student.emergency_contact_phone})`}
+                                </div>
+                              )}
+                              {!student.parent_phone && !student.parent_email && !student.emergency_contact_name && '-'}
+                            </div>
+                          </td>
+                          <td className="actions-column">
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => openEditForm(student)}
+                                variant="secondary"
+                                size="sm"
+                              >
+                                編集
+                              </Button>
+                              <RoleBasedAccess allowedRoles={['admin']}>
+                                <Button
+                                  onClick={() => handleDeleteStudent(student.id, student.name)}
+                                  variant="error"
+                                  size="sm"
+                                >
+                                  削除
+                                </Button>
+                              </RoleBasedAccess>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div className="card info-card">
+            <div className="card-header">
+              <h4 className="card-title">💡 生徒管理について</h4>
+            </div>
+            <div className="card-content">
+              <ul className="info-list">
+                <li>生徒情報は講師と共有されます</li>
+                <li>削除した生徒は非アクティブ状態になり、データは保持されます</li>
+                <li>生徒の詳細ページから学習記録や成績を管理できます</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* パフォーマンスデバッガー（開発環境のみ） */}
+      <PerformanceDebugger />
+    </RoleBasedAccess>
+  );
+};
+
+export default StudentList;
