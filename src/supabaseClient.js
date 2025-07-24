@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://kfggjhvdpgxsgpnzbhia.supabase.co'
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmZ2dqaHZkcGd4c2dwbnpiaGlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEwMzgwNjUsImV4cCI6MjA2NjYxNDA2NX0.XQg6nZ77kVwEJIoarvJ9p5coKl0TQ1zxx6_07WsqoUU'
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
+
+console.log('Supabase URL:', supabaseUrl ? 'Set' : 'Not set')
+console.log('Supabase Anon Key:', supabaseAnonKey ? 'Set' : 'Not set')
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and Anon Key are required')
+  console.error('Supabase環境変数が設定されていません。Vercelの環境変数設定を確認してください。')
+  throw new Error('Supabase URL and Anon Key are required. Please set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY environment variables.')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
