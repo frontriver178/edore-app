@@ -2,7 +2,6 @@
   "name": "edore-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://frontriver178.github.io/edore-app",
   "dependencies": {
     "@supabase/supabase-js": "^2.50.2",
     "@testing-library/dom": "^10.4.0",
